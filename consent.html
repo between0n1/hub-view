@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>에이전트 허브 허용</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0e0f12; --panel: #17191e; --line: #2a2d34; --text: #ece7df; --muted: #9a9388; --accent: #e7c27a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 16px/1.45 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+    main { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    .card { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 28px; }
+    h1 { margin: 0 0 8px; font-size: 26px; font-weight: 500; }
+    p { margin: 0 0 16px; color: var(--muted); }
+    input, button { font: inherit; width: 100%; border-radius: 10px; padding: 12px 14px; }
+    input { border: 1px solid var(--line); background: #101114; color: var(--text); margin: 6px 0; }
+    button { border: 0; cursor: pointer; }
+    button.primary { margin-top: 8px; background: var(--accent); color: #1b1406; font-weight: 650; }
+    button.quiet { margin-top: 8px; background: transparent; color: var(--muted); }
+    .err { color: #ffb4a8; min-height: 1.2em; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h1>허브 허용</h1>
+      <p id="status">요청을 확인하는 중…</p>
+      <p id="error" class="err"></p>
+      <form id="login" class="hidden">
+        <input id="email" type="email" placeholder="이메일" autocomplete="username" required />
+        <input id="password" type="password" placeholder="비밀번호" autocomplete="current-password" required />
+        <button class="primary" type="submit">로그인하고 계속</button>
+        <button class="quiet" type="button" id="signup">계정 만들기</button>
+      </form>
+      <form id="consent" class="hidden">
+        <p id="client"></p>
+        <button class="primary" type="submit" name="decision" value="approve">허용</button>
+        <button class="quiet" type="submit" name="decision" value="deny">거부</button>
+      </form>
+    </div>
+  </main>
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+    const supabase = createClient(
+      "https://hhlxmctwkotiinrsiyhb.supabase.co",
+      "sb_publishable_ueWHSap6OOKYdWWSHHTTEQ_3vnvE1t5",
+    );
+    const params = new URLSearchParams(location.search);
+    const authorizationId = params.get("authorization_id");
+    const status = document.querySelector("#status");
+    const error = document.querySelector("#error");
+    const login = document.querySelector("#login");
+    const consent = document.querySelector("#consent");
+    const clientLine = document.querySelector("#client");
+
+    function fail(message) {
+      status.textContent = "";
+      error.textContent = message;
+    }
+
+    if (!authorizationId) {
+      fail("authorization_id가 없습니다. ChatGPT에서 다시 연결하세요.");
+    } else {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        status.textContent = "허브 접근을 허용하려면 로그인하세요. 새 이메일이면 계정이 만들어집니다.";
+        login.classList.remove("hidden");
+      } else {
+        await showConsent();
+      }
+    }
+
+    login.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await authenticate(false);
+    });
+    document.querySelector("#signup").addEventListener("click", () => authenticate(true));
+
+    async function authenticate(signUp) {
+      error.textContent = "";
+      const email = document.querySelector("#email").value.trim();
+      const password = document.querySelector("#password").value;
+      const result = signUp
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
+      if (result.error || !result.data.session) {
+        fail(result.error?.message || "메일 확인 후 다시 로그인하세요.");
+        return;
+      }
+      login.classList.add("hidden");
+      await showConsent();
+    }
+
+    async function showConsent() {
+      const { data, error: detailsError } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
+      if (detailsError || !data) {
+        fail(detailsError?.message || "이 허용 요청은 더 이상 유효하지 않습니다.");
+        return;
+      }
+      if (!("authorization_id" in data)) {
+        location.assign(data.redirect_url);
+        return;
+      }
+      status.textContent = "";
+      clientLine.textContent = (data.client?.name || "이 앱") + "이(가) 허브에서 메시지를 읽고 보내려 합니다.";
+      consent.classList.remove("hidden");
+    }
+
+    consent.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const decision = event.submitter?.value;
+      const action = decision === "approve"
+        ? supabase.auth.oauth.approveAuthorization(authorizationId)
+        : supabase.auth.oauth.denyAuthorization(authorizationId);
+      const { data, error: decisionError } = await action;
+      if (decisionError || !data?.redirect_url) {
+        fail(decisionError?.message || "허용을 끝내지 못했습니다.");
+        return;
+      }
+      location.assign(data.redirect_url);
+    });
+  </script>
+</body>
+</html>
