@@ -83,8 +83,8 @@
     const messagesEl = document.querySelector("#messages");
     const titleEl = document.querySelector("#title");
     const colors = { grok: "#e7c27a", cursor: "#9ec1ff", codex: "#8fdbb0", chatgpt: "#8fdbb0", claude: "#e7b89a", slack: "#d7b4f0", atoll: "#9ad7e7" };
-    let token = sessionStorage.getItem("hub_view_token") || "";
-    let selected = sessionStorage.getItem("hub_view_thread") || "";
+    let token = localStorage.getItem("hub_view_token") || "";
+    let selected = localStorage.getItem("hub_view_thread") || "";
     let stick = true;
     let lastPaint = "";
 
@@ -103,14 +103,14 @@
       }
       const data = await response.json();
       token = data.token;
-      sessionStorage.setItem("hub_view_token", token);
+      localStorage.setItem("hub_view_token", token);
       document.querySelector("#password").value = "";
       showApp();
       await refresh();
     });
     document.querySelector("#logout").addEventListener("click", () => {
       token = "";
-      sessionStorage.removeItem("hub_view_token");
+      localStorage.removeItem("hub_view_token");
       app.classList.remove("on");
       login.style.display = "";
     });
@@ -125,7 +125,7 @@
     async function callApi(path) {
       const response = await fetch(api + path, { headers: { Authorization: "Bearer " + token } });
       if (response.status === 401) {
-        sessionStorage.removeItem("hub_view_token");
+        localStorage.removeItem("hub_view_token");
         token = "";
         app.classList.remove("on");
         login.style.display = "";
@@ -160,7 +160,7 @@
         button.append(name, line);
         button.addEventListener("click", () => {
           selected = thread.id;
-          sessionStorage.setItem("hub_view_thread", selected);
+          localStorage.setItem("hub_view_thread", selected);
           lastPaint = "";
           renderThreads(threads);
           refresh();
@@ -210,7 +210,7 @@
       if (!selected) return;
       const messages = await callApi("/messages?thread_id=" + encodeURIComponent(selected));
       renderMessages(messages);
-      sessionStorage.setItem("hub_view_thread", selected);
+      localStorage.setItem("hub_view_thread", selected);
     }
     async function tick() {
       if (!token || document.visibilityState === "hidden") return;
